@@ -3,6 +3,7 @@ import sys
 import paramiko
 import threading
 import re
+import json  # For connection persistence
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                              QLineEdit, QPushButton, QListWidget, QTabWidget, QTextEdit, 
                              QFileDialog, QInputDialog, QMessageBox)
@@ -10,6 +11,9 @@ from PyQt5.QtCore import Qt, pyqtSignal
 
 # Set the Qt platform plugin to use X11 instead of Wayland
 os.environ["QT_QPA_PLATFORM"] = "xcb"
+
+# Path to the connections JSON file
+CONNECTIONS_FILE = 'connections.json'
 
 
 class SSHClientApp(QWidget):
@@ -21,6 +25,9 @@ class SSHClientApp(QWidget):
         self.connections = []  # Store tuples of (host, username, private_key)
         self.ssh_clients = {}
         self.channels = {}
+
+        # Load connections from the JSON file on startup
+        self.load_connections()
 
         # Connect the signal to the output box update method
         self.output_received.connect(self.update_output)
@@ -58,7 +65,7 @@ class SSHClientApp(QWidget):
         main_layout.addLayout(sidebar_layout, 1)
         main_layout.addWidget(self.tab_widget, 3)
 
-        self.setWindowTitle("PyQt SSH Client with Real-time Output")
+        self.setWindowTitle("JETSSH Client")
         self.resize(900, 600)
 
     def add_connection(self):
@@ -67,9 +74,12 @@ class SSHClientApp(QWidget):
         user, ok_user = QInputDialog.getText(self, "Username", "Enter SSH Username:")
         if ok_host and ok_user and host and user:
             private_key, _ = QFileDialog.getOpenFileName(self, "Select Private Key (Optional)", "", "Key Files (*.pem *.ppk)")
-            self.connections.append((host, user, private_key))  # Add to connection list
+            self.connections.append({"host": host, "user": user, "private_key": private_key})  # Add to connection list
             display_key = "Using Key" if private_key else "Using Password"
             self.connection_list.addItem(f"{host} ({user}) [{display_key}]")
+
+            # Save connections to file after adding a new one
+            self.save_connections()
         else:
             QMessageBox.warning(self, "Input Error", "Host and Username are required.")
 
@@ -79,13 +89,19 @@ class SSHClientApp(QWidget):
             del self.connections[selected_item]
             self.connection_list.takeItem(selected_item)
 
+            # Save connections to file after removal
+            self.save_connections()
+
     def launch_ssh_session(self):
         selected_item = self.connection_list.currentRow()
         if selected_item < 0:
             QMessageBox.warning(self, "Selection Error", "Please select a connection.")
             return
 
-        host, username, key_file = self.connections[selected_item]
+        connection = self.connections[selected_item]
+        host = connection["host"]
+        username = connection["user"]
+        key_file = connection["private_key"]
 
         # Use password if no key is provided
         if not key_file:
@@ -162,6 +178,24 @@ class SSHClientApp(QWidget):
     def update_output(self, output):
         """ Update the output box with new data """
         self.output_box.append(output)
+
+    def save_connections(self):
+        """ Save connection details to a JSON file """
+        with open(CONNECTIONS_FILE, 'w') as file:
+            json.dump(self.connections, file)
+
+    def load_connections(self):
+        """ Load connection details from the JSON file """
+        if os.path.exists(CONNECTIONS_FILE):
+            with open(CONNECTIONS_FILE, 'r') as file:
+                self.connections = json.load(file)
+
+            # Populate the QListWidget with loaded connections
+            for connection in self.connections:
+                host = connection["host"]
+                user = connection["user"]
+                display_key = "Using Key" if connection["private_key"] else "Using Password"
+                self.connection_list.addItem(f"{host} ({user}) [{display_key}]")
 
 
 # Main entry point of the application
