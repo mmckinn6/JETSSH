@@ -270,6 +270,24 @@ class SSHClientApp(QWidget):
                 display_key = "Using Key" if connection["private_key"] else "Using Password"
                 self.connection_list.addItem(f"{host} ({user}) [{display_key}]")
 
+    def save_connections(self):
+        """ Save connection details to a JSON file """
+        with open(CONNECTIONS_FILE, 'w') as file:
+            json.dump(self.connections, file)
+
+    def load_connections(self):
+        """ Load connection details from the JSON file """
+        if os.path.exists(CONNECTIONS_FILE):
+            with open(CONNECTIONS_FILE, 'r') as file:
+                self.connections = json.load(file)
+
+            # Populate the QListWidget with loaded connections
+            for connection in self.connections:
+                host = connection["host"]
+                user = connection["user"]
+                display_key = "Using Key" if connection["private_key"] else "Using Password"
+                self.connection_list.addItem(f"{host} ({user}) [{display_key}]")
+
 
 # Main entry point of the application
 if __name__ == '__main__':
