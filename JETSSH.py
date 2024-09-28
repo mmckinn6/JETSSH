@@ -4,8 +4,8 @@ import paramiko
 import threading
 import re
 import json  # For connection persistence
-from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                             QLineEdit, QPushButton, QListWidget, QTabWidget, QTextEdit, 
+from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+                             QLineEdit, QPushButton, QListWidget, QTabWidget, QTextEdit,
                              QFileDialog, QInputDialog, QMessageBox, QSplitter)
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5 import QtGui
@@ -26,6 +26,10 @@ class SSHClientApp(QWidget):
         self.connections = []  # Store tuples of (host, username, private_key)
         self.ssh_clients = {}
         self.channels = {}
+
+        # Command history attributes
+        self.command_history = []  # List to store command history
+        self.history_index = -1    # Current position in the history
 
         # Load connections from the JSON file on startup
         self.load_connections()
@@ -202,7 +206,7 @@ class SSHClientApp(QWidget):
             self.command_log.setReadOnly(True)
             splitter.addWidget(self.command_log)
 
-            self.command_entry = QLineEdit()
+            self.command_entry = CommandLineEdit(self)  # Replace with custom QLineEdit for history
             self.command_entry.setPlaceholderText("Enter command...")
             self.command_entry.returnPressed.connect(lambda: self.send_command(host))
 
@@ -243,7 +247,11 @@ class SSHClientApp(QWidget):
 
             # Add command to the command log
             self.command_log.append(command)
-        
+
+            # Add command to history and reset index
+            self.command_history.append(command)
+            self.history_index = -1
+
         self.command_entry.clear()
 
     def update_output(self, output):
@@ -270,23 +278,31 @@ class SSHClientApp(QWidget):
                 display_key = "Using Key" if connection["private_key"] else "Using Password"
                 self.connection_list.addItem(f"{host} ({user}) [{display_key}]")
 
-    def save_connections(self):
-        """ Save connection details to a JSON file """
-        with open(CONNECTIONS_FILE, 'w') as file:
-            json.dump(self.connections, file)
 
-    def load_connections(self):
-        """ Load connection details from the JSON file """
-        if os.path.exists(CONNECTIONS_FILE):
-            with open(CONNECTIONS_FILE, 'r') as file:
-                self.connections = json.load(file)
+# Custom QLineEdit to handle command history navigation
+class CommandLineEdit(QLineEdit):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent = parent
 
-            # Populate the QListWidget with loaded connections
-            for connection in self.connections:
-                host = connection["host"]
-                user = connection["user"]
-                display_key = "Using Key" if connection["private_key"] else "Using Password"
-                self.connection_list.addItem(f"{host} ({user}) [{display_key}]")
+    def keyPressEvent(self, event):
+        # Check for Up/Down arrow keys for history navigation
+        if event.key() == Qt.Key_Up:
+            if self.parent.history_index == -1 and self.parent.command_history:
+                self.parent.history_index = len(self.parent.command_history) - 1
+            elif self.parent.history_index > 0:
+                self.parent.history_index -= 1
+            if self.parent.command_history:
+                self.setText(self.parent.command_history[self.parent.history_index])
+        elif event.key() == Qt.Key_Down:
+            if self.parent.history_index < len(self.parent.command_history) - 1:
+                self.parent.history_index += 1
+                self.setText(self.parent.command_history[self.parent.history_index])
+            else:
+                self.clear()
+                self.parent.history_index = -1
+        else:
+            super().keyPressEvent(event)  # Call the default event handler
 
 
 # Main entry point of the application
