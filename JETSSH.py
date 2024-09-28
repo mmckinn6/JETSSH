@@ -61,9 +61,17 @@ class SSHClientApp(QWidget):
         launch_button = QPushButton("Launch Session")
         launch_button.clicked.connect(self.launch_ssh_session)
 
+        upload_button = QPushButton("Upload File")
+        upload_button.clicked.connect(self.upload_file)
+
+        download_button = QPushButton("Download File")
+        download_button.clicked.connect(self.download_file)
+
         sidebar_layout.addWidget(add_button)
         sidebar_layout.addWidget(remove_button)
         sidebar_layout.addWidget(launch_button)
+        sidebar_layout.addWidget(upload_button)
+        sidebar_layout.addWidget(download_button)
 
         # SSH Tab Area
         self.tab_widget = QTabWidget()
@@ -283,6 +291,68 @@ class SSHClientApp(QWidget):
                 user = connection["user"]
                 display_key = "Using Key" if connection["private_key"] else "Using Password"
                 self.connection_list.addItem(f"{host} ({user}) [{display_key}]")
+
+    # File Upload Functionality
+    def upload_file(self):
+        selected_item = self.connection_list.currentRow()
+        if selected_item < 0:
+            QMessageBox.warning(self, "Selection Error", "Please select a connection.")
+            return
+
+        connection = self.connections[selected_item]
+        host = connection["host"]
+
+        # Open a file dialog to select files to upload
+        local_file, _ = QFileDialog.getOpenFileName(self, "Select File to Upload", "", "All Files (*)")
+        if local_file:
+            # Ask the user for the destination directory on the remote server
+            remote_directory, ok = QInputDialog.getText(self, "Remote Directory", "Enter the destination directory on the remote server:")
+            if ok:
+                try:
+                    # Establish an SFTP connection
+                    sftp_client = self.ssh_clients[host].open_sftp()
+
+                    # Get the remote file path
+                    remote_file = os.path.join(remote_directory, os.path.basename(local_file))
+
+                    # Upload the file
+                    sftp_client.put(local_file, remote_file)
+                    sftp_client.close()
+
+                    QMessageBox.information(self, "Upload Successful", f"File {os.path.basename(local_file)} uploaded to {remote_directory}.")
+                except Exception as e:
+                    QMessageBox.critical(self, "Upload Error", f"Failed to upload file: {str(e)}")
+
+    # File Download Functionality
+    def download_file(self):
+        selected_item = self.connection_list.currentRow()
+        if selected_item < 0:
+            QMessageBox.warning(self, "Selection Error", "Please select a connection.")
+            return
+
+        connection = self.connections[selected_item]
+        host = connection["host"]
+
+        # Ask the user for the remote file path
+        remote_file, ok = QInputDialog.getText(self, "Remote File", "Enter the path of the file to download from the remote server:")
+        if ok:
+            # Open a file dialog to select a download location
+            local_directory = QFileDialog.getExistingDirectory(self, "Select Download Directory")
+            if local_directory:
+                try:
+                    # Establish an SFTP connection
+                    sftp_client = self.ssh_clients[host].open_sftp()
+
+                    # Get the local file path
+                    local_file = os.path.join(local_directory, os.path.basename(remote_file))
+
+                    # Download the file
+                    sftp_client.get(remote_file, local_file)
+                    sftp_client.close()
+
+                    QMessageBox.information(self, "Download Successful", f"File {os.path.basename(remote_file)} downloaded to {local_directory}.")
+                except Exception as e:
+                    QMessageBox.critical(self, "Download Error", f"Failed to download file: {str(e)}")
 
 
 # Custom QLineEdit to handle command history navigation and terminal features
