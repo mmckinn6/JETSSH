@@ -51,15 +51,33 @@ class SSHClientApp(QWidget):
         sidebar_layout.addWidget(QLabel("Connections"))
         sidebar_layout.addWidget(self.connection_list)
 
-        # Buttons for adding and removing connections
+        # Buttons for managing connections
+        connection_button_layout = QVBoxLayout()
+
+        # Launch button (moved above the other buttons)
+        launch_button = QPushButton("Launch Session")
+        launch_button.clicked.connect(self.launch_ssh_session)
+
+        # Add and Remove buttons
         add_button = QPushButton("Add Connection")
         add_button.clicked.connect(self.add_connection)
 
         remove_button = QPushButton("Remove Connection")
         remove_button.clicked.connect(self.remove_connection)
 
-        launch_button = QPushButton("Launch Session")
-        launch_button.clicked.connect(self.launch_ssh_session)
+        # Group the connection-related buttons
+        connection_button_layout.addWidget(launch_button)  # Launch button first
+        connection_button_layout.addWidget(add_button)
+        connection_button_layout.addWidget(remove_button)
+
+        # Add connection-related buttons to sidebar
+        sidebar_layout.addLayout(connection_button_layout)
+
+        # Separator to visually separate file transfer buttons
+        sidebar_layout.addSpacing(20)
+
+        # File Transfer buttons
+        file_transfer_button_layout = QVBoxLayout()
 
         upload_button = QPushButton("Upload File")
         upload_button.clicked.connect(self.upload_file)
@@ -67,11 +85,11 @@ class SSHClientApp(QWidget):
         download_button = QPushButton("Download File")
         download_button.clicked.connect(self.download_file)
 
-        sidebar_layout.addWidget(add_button)
-        sidebar_layout.addWidget(remove_button)
-        sidebar_layout.addWidget(launch_button)
-        sidebar_layout.addWidget(upload_button)
-        sidebar_layout.addWidget(download_button)
+        file_transfer_button_layout.addWidget(upload_button)
+        file_transfer_button_layout.addWidget(download_button)
+
+        # Add file transfer-related buttons to sidebar
+        sidebar_layout.addLayout(file_transfer_button_layout)
 
         # SSH Tab Area
         self.tab_widget = QTabWidget()
@@ -97,7 +115,7 @@ class SSHClientApp(QWidget):
             }
             QLineEdit {
                 background-color: #1e1e1e;
-                color: #00ffff;  # Neon blue for command input
+                color: #00ffff;
                 border: 1px solid #3a3a3a;
             }
             QPushButton {
@@ -106,9 +124,36 @@ class SSHClientApp(QWidget):
                 border: 1px solid #3a3a3a;
                 padding: 5px;
                 font-size: 14px;
+                border-radius: 5px;
+                box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.4);
             }
             QPushButton:hover {
                 background-color: #3a3a3a;
+                box-shadow: 4px 4px 8px rgba(0, 0, 0, 0.6);
+            }
+            QPushButton:pressed {
+                background-color: #4e4e4e;
+                box-shadow: none;
+            }
+            QPushButton#launchButton {
+                background-color: #ff8c00; /* Orange color */
+                color: #ffffff;
+                border-radius: 8px;
+                border: 2px solid #4e4e4e;
+                padding: 10px;
+                font-size: 16px;
+                font-weight: bold;
+                box-shadow: 3px 3px 6px rgba(0, 0, 0, 0.6);
+            }
+            QPushButton#launchButton:hover {
+                background-color: #ffa500;
+                border: 2px solid #4e4e4e;
+                box-shadow: 5px 5px 10px rgba(0, 0, 0, 0.8);
+            }
+            QPushButton#launchButton:pressed {
+                background-color: #ff7f00;
+                border: 2px solid #4e4e4e;
+                box-shadow: none;
             }
             QListWidget {
                 background-color: #2e2e2e;
@@ -142,6 +187,9 @@ class SSHClientApp(QWidget):
                 min-height: 20px;
             }
         """)
+
+        # Set a custom object name for the launch button to apply specific styles
+        launch_button.setObjectName("launchButton")
 
     def add_connection(self):
         # Input dialog to get connection details
