@@ -3,12 +3,12 @@ import sys
 import paramiko
 import threading
 import re
-import json  # For connection persistence
+import json
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QLineEdit, QPushButton, QListWidget, QTabWidget, QTextEdit,
                              QFileDialog, QInputDialog, QMessageBox, QSplitter)
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5 import QtGui
+from PyQt5.QtCore import Qt, pyqtSignal, QMutex
+from PyQt5.QtGui import QTextCursor
 
 # Set the Qt platform plugin to use X11 instead of Wayland
 os.environ["QT_QPA_PLATFORM"] = "xcb"
@@ -18,7 +18,7 @@ CONNECTIONS_FILE = 'connections.json'
 
 
 class SSHClientApp(QWidget):
-    output_received = pyqtSignal(str)  # Define a signal to receive output
+    output_received = pyqtSignal(str, str)  # Signal to pass (host, output)
 
     def __init__(self):
         super().__init__()
@@ -26,6 +26,8 @@ class SSHClientApp(QWidget):
         self.connections = []  # Store tuples of (host, username, private_key)
         self.ssh_clients = {}
         self.channels = {}
+        self.output_boxes = {}  # Map to store output boxes for each tab
+        self.mutex = QMutex()   # Mutex for thread safety
 
         # Command history attributes
         self.command_history = []  # List to store command history
@@ -34,7 +36,7 @@ class SSHClientApp(QWidget):
         # Load connections from the JSON file on startup
         self.load_connections()
 
-        # Connect the signal to the output box update method
+        # Connect the signal to the output update method
         self.output_received.connect(self.update_output)
 
     def init_ui(self):
@@ -198,15 +200,11 @@ class SSHClientApp(QWidget):
 
             splitter = QSplitter(Qt.Vertical)
 
-            self.output_box = QTextEdit()
-            self.output_box.setReadOnly(True)
-            splitter.addWidget(self.output_box)
+            output_box = QTextEdit()
+            output_box.setReadOnly(True)
+            splitter.addWidget(output_box)
 
-            self.command_log = QTextEdit()  # New widget to keep command history
-            self.command_log.setReadOnly(True)
-            splitter.addWidget(self.command_log)
-
-            self.command_entry = CommandLineEdit(self)  # Replace with custom QLineEdit for history
+            self.command_entry = CommandLineEdit(self)  # Replace with custom QLineEdit for history and terminal features
             self.command_entry.setPlaceholderText("Enter command...")
             self.command_entry.returnPressed.connect(lambda: self.send_command(host))
 
@@ -217,6 +215,9 @@ class SSHClientApp(QWidget):
             self.tab_widget.addTab(session_tab, f"{host} ({username})")
             self.tab_widget.setCurrentWidget(session_tab)
 
+            # Map the output box to the host
+            self.output_boxes[host] = output_box
+
             # Start a thread to read output from the channel
             output_thread = threading.Thread(target=self.read_output, args=(host,))
             output_thread.daemon = True
@@ -226,39 +227,44 @@ class SSHClientApp(QWidget):
             QMessageBox.critical(self, "Connection Error", f"Failed to connect: {str(e)}")
 
     def strip_ansi_codes(self, text):
-        """ Remove ANSI escape codes from the output """
-        ansi_escape = re.compile(r'(?:\x1B[@-_][0-?]*[ -/]*[@-~])')
-        return ansi_escape.sub('', text)
+        """ Keep only relevant ANSI codes like colors and strip unnecessary ones """
+        ansi_escape_color = re.compile(r'(\x1B[@-_][0-?]*[ -/]*[@-~])')
+        if '\x1b[H\x1b[J' in text:  # This is the escape sequence for clearing the screen
+            text = text.replace('\x1b[H\x1b[J', '')  # Strip the clear screen code
+        return ansi_escape_color.sub('', text)
 
     def read_output(self, host):
         channel = self.channels[host]
         while True:
             if channel.recv_ready():
                 output = channel.recv(1024).decode()
-                clean_output = self.strip_ansi_codes(output)  # Clean the output
-                self.output_received.emit(clean_output)  # Emit signal with cleaned output
+                clean_output = self.strip_ansi_codes(output)
+                self.output_received.emit(host, clean_output)
 
     def send_command(self, host):
         command = self.command_entry.text().strip()
         if command and host in self.channels:
             channel = self.channels[host]
-            command_with_newline = command + "\n"
-            channel.send(command_with_newline)
+            channel.send(command + "\n")
 
-            # Add command to the command log
-            self.command_log.append(command)
+            # Add the command to the history if it's not empty
+            if command:
+                self.command_history.append(command)
 
-            # Add command to history and reset index
-            self.command_history.append(command)
+            # Reset history index after sending a command
             self.history_index = -1
 
         self.command_entry.clear()
 
-    def update_output(self, output):
-        """ Update the output box with new data and auto-scroll """
-        self.output_box.moveCursor(QtGui.QTextCursor.End)
-        self.output_box.insertPlainText(output)
-        self.output_box.moveCursor(QtGui.QTextCursor.End)  # Ensure it stays at the bottom
+    def update_output(self, host, output):
+        """ Update the output box specific to the host and ensure thread safety """
+        if host in self.output_boxes:
+            self.mutex.lock()  # Lock for thread safety
+            output_box = self.output_boxes[host]
+            output_box.moveCursor(QTextCursor.End)
+            output_box.insertPlainText(output)
+            output_box.moveCursor(QTextCursor.End)  # Ensure it stays at the bottom
+            self.mutex.unlock()  # Unlock after updating the output box
 
     def save_connections(self):
         """ Save connection details to a JSON file """
@@ -279,30 +285,47 @@ class SSHClientApp(QWidget):
                 self.connection_list.addItem(f"{host} ({user}) [{display_key}]")
 
 
-# Custom QLineEdit to handle command history navigation
+# Custom QLineEdit to handle command history navigation and terminal features
 class CommandLineEdit(QLineEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
 
     def keyPressEvent(self, event):
+        # Handle Ctrl+C to send interrupt signal (like in a real terminal)
+        if event.key() == Qt.Key_C and event.modifiers() == Qt.ControlModifier:
+            if self.parent.channels:
+                # Send interrupt signal (Ctrl+C equivalent)
+                self.parent.channels[list(self.parent.channels.keys())[0]].send("\x03")
+            return
+
+        # Handle Ctrl+D to close the session
+        if event.key() == Qt.Key_D and event.modifiers() == Qt.ControlModifier:
+            if self.parent.channels:
+                # Send exit command (Ctrl+D equivalent)
+                self.parent.channels[list(self.parent.channels.keys())[0]].send("\x04")
+            return
+
         # Check for Up/Down arrow keys for history navigation
         if event.key() == Qt.Key_Up:
-            if self.parent.history_index == -1 and self.parent.command_history:
-                self.parent.history_index = len(self.parent.command_history) - 1
-            elif self.parent.history_index > 0:
-                self.parent.history_index -= 1
             if self.parent.command_history:
+                if self.parent.history_index == -1:
+                    self.parent.history_index = len(self.parent.command_history) - 1
+                elif self.parent.history_index > 0:
+                    self.parent.history_index -= 1
                 self.setText(self.parent.command_history[self.parent.history_index])
+            return
         elif event.key() == Qt.Key_Down:
-            if self.parent.history_index < len(self.parent.command_history) - 1:
-                self.parent.history_index += 1
-                self.setText(self.parent.command_history[self.parent.history_index])
-            else:
-                self.clear()
-                self.parent.history_index = -1
-        else:
-            super().keyPressEvent(event)  # Call the default event handler
+            if self.parent.command_history:
+                if self.parent.history_index < len(self.parent.command_history) - 1:
+                    self.parent.history_index += 1
+                    self.setText(self.parent.command_history[self.parent.history_index])
+                else:
+                    self.clear()
+                    self.parent.history_index = -1
+            return
+
+        super().keyPressEvent(event)  # Call the default event handler
 
 
 # Main entry point of the application
