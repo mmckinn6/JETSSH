@@ -4,6 +4,7 @@ import paramiko
 import threading
 import re
 import json
+import JETSSHKEYGEN
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QLineEdit, QPushButton, QListWidget, QTabWidget, QTextEdit,
                              QFileDialog, QInputDialog, QMessageBox, QSplitter)
@@ -11,7 +12,7 @@ from PyQt5.QtCore import Qt, pyqtSignal, QMutex
 from PyQt5.QtGui import QTextCursor
 
 # Set the Qt platform plugin to use X11 instead of Wayland
-os.environ["QT_QPA_PLATFORM"] = "xcb"
+#os.environ["QT_QPA_PLATFORM"] = "xcb"
 
 # Path to the connections JSON file
 CONNECTIONS_FILE = 'connections.json'
@@ -93,6 +94,10 @@ class SSHClientApp(QWidget):
 
         # SSH Tab Area
         self.tab_widget = QTabWidget()
+
+        # Adding the SSH key generation tab @Nick
+        self.keygen_tab = JETSSHKEYGEN.SSHKeyGeneratorTab()
+        self.tab_widget.addTab(self.keygen_tab, "SSH Key Generator")
 
         # Add everything to the main layout
         main_layout.addLayout(sidebar_layout, 1)
