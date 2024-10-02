@@ -5,6 +5,7 @@ import threading
 import re
 import json
 import JETSSHKEYGEN
+from PredefinedCommands import PredefinedCommands
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QLineEdit, QPushButton, QListWidget, QTabWidget, QTextEdit,
                              QFileDialog, QInputDialog, QMessageBox, QSplitter)
@@ -272,6 +273,9 @@ class SSHClientApp(QWidget):
             session_layout.addWidget(splitter)
             session_layout.addWidget(self.command_entry)
             session_tab.setLayout(session_layout)
+
+            predefined_commands_widget = PredefinedCommands(self)  # Pass SSH client reference
+            session_layout.addWidget(predefined_commands_widget)  # Add Predefined Commands UI to the tab
 
             self.tab_widget.addTab(session_tab, f"{host} ({username})")
             self.tab_widget.setCurrentWidget(session_tab)
