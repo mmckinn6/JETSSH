@@ -1,7 +1,6 @@
 import json
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QListWidget,
-                             QInputDialog, QLabel, QMessageBox)
-
+                             QInputDialog, QLabel, QMessageBox, QHBoxLayout)
 
 class PredefinedCommands(QWidget):
     def __init__(self, ssh_client_app):
@@ -14,26 +13,51 @@ class PredefinedCommands(QWidget):
     def init_ui(self):
         layout = QVBoxLayout(self)
 
+        # Create a layout for the toggle button
+        toggle_layout = QHBoxLayout()
+
+        # Toggle button to show/hide the command panel
+        self.toggle_button = QPushButton("Hide Commands")
+        self.toggle_button.clicked.connect(self.toggle_command_panel)
+        toggle_layout.addWidget(self.toggle_button)
+        layout.addLayout(toggle_layout)
+
         # Command List
         self.command_list = QListWidget()
         layout.addWidget(QLabel("Predefined Commands"))
         layout.addWidget(self.command_list)
 
         # Buttons for managing commands
-        add_command_button = QPushButton("Add Command")
-        add_command_button.clicked.connect(self.add_command)
-        layout.addWidget(add_command_button)
+        self.add_command_button = QPushButton("Add Command")
+        self.add_command_button.clicked.connect(self.add_command)
+        layout.addWidget(self.add_command_button)
 
-        remove_command_button = QPushButton("Remove Command")
-        remove_command_button.clicked.connect(self.remove_command)
-        layout.addWidget(remove_command_button)
+        self.remove_command_button = QPushButton("Remove Command")
+        self.remove_command_button.clicked.connect(self.remove_command)
+        layout.addWidget(self.remove_command_button)
 
-        execute_command_button = QPushButton("Execute Command")
-        execute_command_button.clicked.connect(self.execute_command)
-        layout.addWidget(execute_command_button)
+        self.execute_command_button = QPushButton("Execute Command")
+        self.execute_command_button.clicked.connect(self.execute_command)
+        layout.addWidget(self.execute_command_button)
 
         # Load predefined commands on startup
         self.load_commands()
+
+    def toggle_command_panel(self):
+        """Toggle the visibility of the predefined commands panel."""
+        is_visible = self.command_list.isVisible()
+
+        # Toggle visibility
+        self.command_list.setVisible(not is_visible)
+        self.add_command_button.setVisible(not is_visible)
+        self.remove_command_button.setVisible(not is_visible)
+        self.execute_command_button.setVisible(not is_visible)
+
+        # Update toggle button text
+        if is_visible:
+            self.toggle_button.setText("Show Commands")
+        else:
+            self.toggle_button.setText("Hide Commands")
 
     def load_commands(self):
         """Load predefined commands from JSON file."""
@@ -93,17 +117,12 @@ class PredefinedCommands(QWidget):
         # Extract the host part from the tab text
         host = current_tab_text.split()[0]  # Split by space and take the first part
 
-        # Debug: Print out the extracted host and available channels
-        print(f"Extracted host: {host}")
-        print(f"Available channels: {self.ssh_client_app.channels.keys()}")
-
         # Check if there's an active SSH session for the host
         if host in self.ssh_client_app.channels:
             channel = self.ssh_client_app.channels[host]
             try:
                 # Send the command to the active channel
                 channel.send(command + "\n")
-                print(f"Command sent: {command}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to send command: {str(e)}")
         else:
