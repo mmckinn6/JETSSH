@@ -56,6 +56,8 @@ class SSHClientApp(QWidget):
         # Buttons for managing connections
         connection_button_layout = QVBoxLayout()
 
+        #Enabling closing tabs
+
         # Launch button (moved above the other buttons)
         launch_button = QPushButton("Launch Session")
         launch_button.clicked.connect(self.launch_ssh_session)
@@ -95,6 +97,9 @@ class SSHClientApp(QWidget):
 
         # SSH Tab Area
         self.tab_widget = QTabWidget()
+        # Enable closable tabs and connect close event
+        self.tab_widget.setTabsClosable(True)
+        self.tab_widget.tabCloseRequested.connect(self.close_tab)
 
         # Adding the SSH key generation tab @Nick
         self.keygen_tab = JETSSHKEYGEN.SSHKeyGeneratorTab()
@@ -348,6 +353,23 @@ class SSHClientApp(QWidget):
                 user = connection["user"]
                 display_key = "Using Key" if connection["private_key"] else "Using Password"
                 self.connection_list.addItem(f"{host} ({user}) [{display_key}]")
+
+    def close_tab(self, index):
+        # Get the host associated with this tab
+        tab_text = self.tab_widget.tabText(index)
+        host = tab_text.split()[0]  # Assuming the host is the first part of the tab title
+
+    # Close the SSH connection for this tab if it's active
+        if host in self.ssh_clients:
+            ssh_client = self.ssh_clients.pop(host, None)
+            if ssh_client:
+                ssh_client.close()  # Close the SSH connection
+            self.channels.pop(host, None)  # Remove the associated channel
+            self.output_boxes.pop(host, None)  # Remove the output box
+
+        # Remove the tab from the widget
+        self.tab_widget.removeTab(index)
+
 
     # File Upload Functionality
     def upload_file(self):
