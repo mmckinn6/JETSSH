@@ -1,9 +1,13 @@
 import os
 import sys
+import socket
 import paramiko
 import threading
 import re
 import json
+import logging
+import getpass
+from pathlib import Path
 import JETSSHKEYGEN
 from PredefinedCommands import PredefinedCommands
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -18,6 +22,17 @@ from PyQt5.QtGui import QTextCursor
 # Path to the connections JSON file
 CONNECTIONS_FILE = 'connections.json'
 
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('jetssh.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
 
 class SSHClientApp(QWidget):
     output_received = pyqtSignal(str, str)  # Signal to pass (host, output)
@@ -29,7 +44,9 @@ class SSHClientApp(QWidget):
         self.ssh_clients = {}
         self.channels = {}
         self.output_boxes = {}  # Map to store output boxes for each tab
+        self.output_threads = {}  # Track output threads for proper cleanup
         self.mutex = QMutex()   # Mutex for thread safety
+        self.shutdown_flag = threading.Event()  # Graceful shutdown flag
 
         # Command history attributes
         self.command_history = []  # List to store command history
@@ -109,113 +126,102 @@ class SSHClientApp(QWidget):
         main_layout.addLayout(sidebar_layout, 1)
         main_layout.addWidget(self.tab_widget, 3)
 
-        self.setWindowTitle("JETSSH Client")
+        self.setWindowTitle("JETSSH Client - Enhanced")
         self.resize(900, 600)
 
-        # Apply stylesheet for UI
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #1e1e1e;
-                color: #dcdcdc;
-                font-family: Consolas, Monaco, monospace;
-            }
-            QTextEdit {
-                background-color: #1e1e1e;
-                color: #dcdcdc;
-                border: 1px solid #3a3a3a;
-            }
-            QLineEdit {
-                background-color: #1e1e1e;
-                color: #00ffff;
-                border: 1px solid #3a3a3a;
-            }
-            QPushButton {
-                background-color: #2e2e2e;
-                color: #dcdcdc;
-                border: 1px solid #3a3a3a;
-                padding: 5px;
-                font-size: 14px;
-                border-radius: 5px;
-                box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.4);
-            }
-            QPushButton:hover {
-                background-color: #3a3a3a;
-                box-shadow: 4px 4px 8px rgba(0, 0, 0, 0.6);
-            }
-            QPushButton:pressed {
-                background-color: #4e4e4e;
-                box-shadow: none;
-            }
-            QPushButton#launchButton {
-                background-color: #ff8c00; /* Orange color */
-                color: #ffffff;
-                border-radius: 8px;
-                border: 2px solid #4e4e4e;
-                padding: 10px;
-                font-size: 16px;
-                font-weight: bold;
-                box-shadow: 3px 3px 6px rgba(0, 0, 0, 0.6);
-            }
-            QPushButton#launchButton:hover {
-                background-color: #ffa500;
-                border: 2px solid #4e4e4e;
-                box-shadow: 5px 5px 10px rgba(0, 0, 0, 0.8);
-            }
-            QPushButton#launchButton:pressed {
-                background-color: #ff7f00;
-                border: 2px solid #4e4e4e;
-                box-shadow: none;
-            }
-            QListWidget {
-                background-color: #2e2e2e;
-                color: #dcdcdc;
-                border: 1px solid #3a3a3a;
-            }
-            QLabel {
-                color: #dcdcdc;
-                font-size: 14px;
-            }
-            QTabWidget::pane {
-                border: 1px solid #3a3a3a;
-            }
-            QTabBar::tab {
-                background-color: #2e2e2e;
-                padding: 10px;
-                color: #dcdcdc;
-            }
-            QTabBar::tab:selected {
-                background-color: #3a3a3a;
-                color: #ffffff;
-            }
-            QScrollBar:vertical {
-                border: 1px solid #3a3a3a;
-                background-color: #1e1e1e;
-                width: 12px;
-            }
-            QScrollBar::handle:vertical {
-                background-color: #3a3a3a;
-                border-radius: 5px;
-                min-height: 20px;
-            }
-        """)
+        # Load stylesheet from external file
+        self.load_stylesheet()
 
         # Set a custom object name for the launch button to apply specific styles
         launch_button.setObjectName("launchButton")
 
+    def load_stylesheet(self):
+        """Load stylesheet from external CSS file"""
+        try:
+            css_path = os.path.join(os.path.dirname(__file__), 'styles.css')
+            if os.path.exists(css_path):
+                with open(css_path, 'r') as css_file:
+                    self.setStyleSheet(css_file.read())
+                logger.info("Loaded external stylesheet")
+            else:
+                logger.warning("External stylesheet not found, using default styles")
+                self.apply_default_stylesheet()
+        except Exception as e:
+            logger.error(f"Error loading stylesheet: {str(e)}")
+            self.apply_default_stylesheet()
+
+    def apply_default_stylesheet(self):
+        """Apply basic fallback stylesheet"""
+        self.setStyleSheet("""
+            QWidget { background-color: #1e1e1e; color: #dcdcdc; }
+            QPushButton { background-color: #2e2e2e; color: #dcdcdc; border: 1px solid #3a3a3a; padding: 5px; }
+            QTextEdit { background-color: #1e1e1e; color: #dcdcdc; border: 1px solid #3a3a3a; }
+            QLineEdit { background-color: #1e1e1e; color: #00ffff; border: 1px solid #3a3a3a; }
+        """)
+
     def add_connection(self):
+        """Add a new SSH connection with validation"""
         # Input dialog to get connection details
         host, ok_host = QInputDialog.getText(self, "Host", "Enter SSH Host:")
-        user, ok_user = QInputDialog.getText(self, "Username", "Enter SSH Username:")
-        if ok_host and ok_user and host and user:
-            private_key, _ = QFileDialog.getOpenFileName(self, "Select Private Key (Optional)", "", "Key Files (*.pem *.ppk)")
-            self.connections.append({"host": host, "user": user, "private_key": private_key})  # Add to connection list
-            display_key = "Using Key" if private_key else "Using Password"
-            self.connection_list.addItem(f"{host} ({user}) [{display_key}]")
+        if not ok_host or not host or not host.strip():
+            return
 
-            # Save connections to file after adding a new one
-            self.save_connections()
-        else:
-            QMessageBox.warning(self, "Input Error", "Host and Username are required.")
+        host = host.strip()
+
+        # Basic hostname validation
+        if not self.validate_hostname(host):
+            QMessageBox.warning(self, "Invalid Host", "Please enter a valid hostname or IP address.")
+            return
+
+        user, ok_user = QInputDialog.getText(self, "Username", "Enter SSH Username:")
+        if not ok_user or not user or not user.strip():
+            return
+
+        user = user.strip()
+
+        # Check for duplicate connections
+        if any(conn['host'] == host and conn['user'] == user for conn in self.connections):
+            QMessageBox.warning(self, "Duplicate Connection", "This connection already exists.")
+            return
+
+        private_key, _ = QFileDialog.getOpenFileName(
+            self, "Select Private Key (Optional)", "",
+            "Key Files (*.pem *.ppk *.pub *.key);;All Files (*)"
+        )
+
+        # Validate private key file if provided
+        if private_key and not os.path.exists(private_key):
+            QMessageBox.warning(self, "Key File Error", "Selected private key file does not exist.")
+            return
+
+        connection = {"host": host, "user": user, "private_key": private_key or ""}
+        self.connections.append(connection)
+        display_key = "Using Key" if private_key else "Using Password"
+        self.connection_list.addItem(f"{host} ({user}) [{display_key}]")
+
+        # Save connections to file after adding a new one
+        if self.save_connections():
+            logger.info(f"Added connection: {user}@{host}")
+
+    def validate_hostname(self, hostname):
+        """Basic hostname validation"""
+        if not hostname or len(hostname) > 255:
+            return False
+
+        # Allow localhost and IP addresses
+        if hostname in ['localhost', '127.0.0.1']:
+            return True
+
+        # Basic regex for hostname/IP validation
+        import re
+        hostname_pattern = re.compile(
+            r'^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$'
+        )
+        ip_pattern = re.compile(
+            r'^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
+        )
+
+        return bool(hostname_pattern.match(hostname) or ip_pattern.match(hostname))
 
     def remove_connection(self):
         selected_item = self.connection_list.currentRow()
@@ -247,13 +253,23 @@ class SSHClientApp(QWidget):
         try:
             # Create an SSH client instance
             ssh = paramiko.SSHClient()
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+            # Use more secure host key policy
+            known_hosts_path = os.path.expanduser('~/.ssh/known_hosts')
+            if os.path.exists(known_hosts_path):
+                ssh.load_host_keys(known_hosts_path)
+            ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
 
             if key_file:  # If key file is provided
-                private_key = paramiko.RSAKey.from_private_key_file(key_file)
-                ssh.connect(host, username=username, pkey=private_key)
+                private_key = self.load_private_key(key_file)
+                if private_key:
+                    ssh.connect(host, username=username, pkey=private_key)
+                else:
+                    raise ValueError("Failed to load private key")
             else:  # Use password-based authentication
                 ssh.connect(host, username=username, password=password)
+                # Clear password from memory
+                password = None
 
             self.ssh_clients[host] = ssh  # Store the SSH client
 
@@ -292,9 +308,52 @@ class SSHClientApp(QWidget):
             output_thread = threading.Thread(target=self.read_output, args=(host,))
             output_thread.daemon = True
             output_thread.start()
+            self.output_threads[host] = output_thread
+
+        except paramiko.AuthenticationException:
+            logger.error(f"Authentication failed for {username}@{host}")
+            QMessageBox.critical(self, "Authentication Error", "Authentication failed. Please check your credentials.")
+        except paramiko.SSHException as e:
+            logger.error(f"SSH connection error for {host}: {str(e)}")
+            QMessageBox.critical(self, "SSH Error", f"SSH connection failed: {str(e)}")
+        except Exception as e:
+            logger.error(f"Unexpected error connecting to {host}: {str(e)}")
+            QMessageBox.critical(self, "Connection Error", f"Failed to connect: {str(e)}")
+
+    def load_private_key(self, key_file):
+        """Load private key supporting multiple key types"""
+        if not os.path.exists(key_file):
+            logger.error(f"Private key file not found: {key_file}")
+            return None
+
+        try:
+            # Try different key types
+            for key_class in [paramiko.RSAKey, paramiko.DSSKey, paramiko.ECDSAKey, paramiko.Ed25519Key]:
+                try:
+                    return key_class.from_private_key_file(key_file)
+                except paramiko.SSHException:
+                    continue
+                except paramiko.PasswordRequiredException:
+                    # Handle encrypted keys
+                    passphrase, ok = QInputDialog.getText(
+                        self, "Key Passphrase",
+                        f"Enter passphrase for key {os.path.basename(key_file)}:",
+                        echo=QLineEdit.Password
+                    )
+                    if ok and passphrase:
+                        try:
+                            key = key_class.from_private_key_file(key_file, password=passphrase)
+                            passphrase = None  # Clear from memory
+                            return key
+                        except paramiko.SSHException:
+                            continue
+
+            logger.error(f"Unable to load private key: {key_file}")
+            return None
 
         except Exception as e:
-            QMessageBox.critical(self, "Connection Error", f"Failed to connect: {str(e)}")
+            logger.error(f"Error loading private key {key_file}: {str(e)}")
+            return None
 
     def strip_ansi_codes(self, text):
         """ Keep only relevant ANSI codes like colors and strip unnecessary ones """
@@ -304,25 +363,78 @@ class SSHClientApp(QWidget):
         return ansi_escape_color.sub('', text)
 
     def read_output(self, host):
-        channel = self.channels[host]
-        while True:
-            if channel.recv_ready():
-                output = channel.recv(1024).decode()
-                clean_output = self.strip_ansi_codes(output)
-                self.output_received.emit(host, clean_output)
+        """Read output from SSH channel with proper termination conditions"""
+        channel = self.channels.get(host)
+        if not channel:
+            logger.warning(f"No channel found for host: {host}")
+            return
+
+        try:
+            while (channel.active and host in self.channels and
+                   not self.shutdown_flag.is_set()):
+                try:
+                    if channel.recv_ready():
+                        output = channel.recv(1024).decode('utf-8', errors='ignore')
+                        if output:
+                            clean_output = self.strip_ansi_codes(output)
+                            self.output_received.emit(host, clean_output)
+                    else:
+                        # Small sleep to prevent excessive CPU usage
+                        # Use shutdown_flag for interruptible sleep
+                        if self.shutdown_flag.wait(0.1):
+                            break
+
+                    # Check if channel is still active
+                    if channel.exit_status_ready():
+                        break
+
+                except (socket.timeout, socket.error):
+                    break
+                except Exception as e:
+                    logger.error(f"Error reading from channel {host}: {str(e)}")
+                    break
+
+        except Exception as e:
+            logger.error(f"Critical error in read_output for {host}: {str(e)}")
+        finally:
+            logger.info(f"Read output thread for {host} terminated")
 
     def send_command(self, host):
         command = self.command_entry.text().strip()
-        if command and host in self.channels:
-            channel = self.channels[host]
-            channel.send(command + "\n")
+        if not command:
+            self.command_entry.clear()
+            return
 
-            # Add the command to the history if it's not empty
-            if command:
+        if host not in self.channels:
+            logger.warning(f"No active channel for host: {host}")
+            QMessageBox.warning(self, "Connection Error", "No active SSH session for this host.")
+            return
+
+        try:
+            channel = self.channels[host]
+            if not channel.active:
+                logger.warning(f"Channel for {host} is not active")
+                QMessageBox.warning(self, "Connection Error", "SSH session is not active.")
+                return
+
+            # Send the command
+            channel.send(command + "\n")
+            logger.debug(f"Sent command to {host}: {command}")
+
+            # Add the command to the history if it's not empty and not a duplicate
+            if command and (not self.command_history or self.command_history[-1] != command):
                 self.command_history.append(command)
+
+                # Limit history size
+                if len(self.command_history) > 1000:
+                    self.command_history = self.command_history[-1000:]
 
             # Reset history index after sending a command
             self.history_index = -1
+
+        except Exception as e:
+            logger.error(f"Error sending command to {host}: {str(e)}")
+            QMessageBox.critical(self, "Command Error", f"Failed to send command: {str(e)}")
 
         self.command_entry.clear()
 
@@ -337,38 +449,189 @@ class SSHClientApp(QWidget):
             self.mutex.unlock()  # Unlock after updating the output box
 
     def save_connections(self):
-        """ Save connection details to a JSON file """
-        with open(CONNECTIONS_FILE, 'w') as file:
-            json.dump(self.connections, file)
+        """Save connection details to a JSON file with proper error handling"""
+        try:
+            # Validate connections data
+            if not isinstance(self.connections, list):
+                logger.error("Invalid connections data structure")
+                return False
+
+            # Create backup of existing file
+            if os.path.exists(CONNECTIONS_FILE):
+                backup_file = f"{CONNECTIONS_FILE}.backup"
+                try:
+                    os.rename(CONNECTIONS_FILE, backup_file)
+                except OSError as e:
+                    logger.warning(f"Could not create backup: {e}")
+
+            # Save with proper permissions
+            with open(CONNECTIONS_FILE, 'w') as file:
+                json.dump(self.connections, file, indent=2)
+
+            # Set restrictive permissions (owner read/write only)
+            try:
+                os.chmod(CONNECTIONS_FILE, 0o600)
+            except OSError:
+                logger.warning("Could not set restrictive permissions on connections file")
+
+            logger.info(f"Saved {len(self.connections)} connections")
+            return True
+
+        except (IOError, OSError, json.JSONEncodeError) as e:
+            logger.error(f"Error saving connections: {str(e)}")
+            QMessageBox.critical(self, "Save Error", f"Failed to save connections: {str(e)}")
+            return False
 
     def load_connections(self):
-        """ Load connection details from the JSON file """
-        if os.path.exists(CONNECTIONS_FILE):
+        """Load connection details from the JSON file with validation"""
+        self.connections = []
+
+        if not os.path.exists(CONNECTIONS_FILE):
+            logger.info("No connections file found, starting with empty list")
+            return
+
+        try:
+            # Check file permissions
+            file_stat = os.stat(CONNECTIONS_FILE)
+            if file_stat.st_mode & 0o077:  # Check if file is readable by others
+                logger.warning("Connections file has permissive permissions")
+
             with open(CONNECTIONS_FILE, 'r') as file:
-                self.connections = json.load(file)
+                data = json.load(file)
+
+            # Validate data structure
+            if not isinstance(data, list):
+                logger.error("Invalid connections file format")
+                return
+
+            # Validate each connection
+            valid_connections = []
+            for connection in data:
+                if self.validate_connection(connection):
+                    valid_connections.append(connection)
+                else:
+                    logger.warning(f"Skipping invalid connection: {connection}")
+
+            self.connections = valid_connections
 
             # Populate the QListWidget with loaded connections
             for connection in self.connections:
-                host = connection["host"]
-                user = connection["user"]
-                display_key = "Using Key" if connection["private_key"] else "Using Password"
+                host = connection.get("host", "Unknown")
+                user = connection.get("user", "Unknown")
+                display_key = "Using Key" if connection.get("private_key") else "Using Password"
                 self.connection_list.addItem(f"{host} ({user}) [{display_key}]")
 
+            logger.info(f"Loaded {len(self.connections)} valid connections")
+
+        except (IOError, OSError, json.JSONDecodeError) as e:
+            logger.error(f"Error loading connections: {str(e)}")
+            QMessageBox.warning(self, "Load Error", f"Failed to load connections: {str(e)}")
+
+    def validate_connection(self, connection):
+        """Validate connection data structure"""
+        if not isinstance(connection, dict):
+            return False
+
+        required_fields = ["host", "user"]
+        for field in required_fields:
+            if field not in connection or not isinstance(connection[field], str):
+                return False
+
+        # Validate private_key field (can be empty string or valid path)
+        private_key = connection.get("private_key", "")
+        if not isinstance(private_key, str):
+            return False
+
+        return True
+
     def close_tab(self, index):
+        """Close tab with proper resource cleanup"""
         # Get the host associated with this tab
         tab_text = self.tab_widget.tabText(index)
-        host = tab_text.split()[0]  # Assuming the host is the first part of the tab title
+        if not tab_text or '(' not in tab_text:
+            self.tab_widget.removeTab(index)
+            return
 
-    # Close the SSH connection for this tab if it's active
-        if host in self.ssh_clients:
-            ssh_client = self.ssh_clients.pop(host, None)
-            if ssh_client:
-                ssh_client.close()  # Close the SSH connection
-            self.channels.pop(host, None)  # Remove the associated channel
-            self.output_boxes.pop(host, None)  # Remove the output box
+        try:
+            host = tab_text.split()[0]  # Extract host from tab title
+        except (IndexError, AttributeError):
+            logger.warning(f"Could not extract host from tab text: {tab_text}")
+            self.tab_widget.removeTab(index)
+            return
+
+        # Don't close the SSH Key Generator tab
+        if "SSH Key Generator" in tab_text:
+            self.tab_widget.removeTab(index)
+            return
+
+        logger.info(f"Closing connection to {host}")
+
+        # Close the SSH connection and associated resources
+        try:
+            # Close the channel first
+            if host in self.channels:
+                channel = self.channels.pop(host, None)
+                if channel and channel.active:
+                    channel.close()
+                    logger.debug(f"Closed channel for {host}")
+
+            # Wait for output thread to finish (with timeout)
+            if host in self.output_threads:
+                output_thread = self.output_threads.pop(host, None)
+                if output_thread and output_thread.is_alive():
+                    output_thread.join(timeout=2.0)
+                    if output_thread.is_alive():
+                        logger.warning(f"Output thread for {host} did not terminate gracefully")
+
+            # Close SSH client
+            if host in self.ssh_clients:
+                ssh_client = self.ssh_clients.pop(host, None)
+                if ssh_client:
+                    ssh_client.close()
+                    logger.debug(f"Closed SSH client for {host}")
+
+            # Clean up GUI references
+            self.output_boxes.pop(host, None)
+
+        except Exception as e:
+            logger.error(f"Error closing connection to {host}: {str(e)}")
 
         # Remove the tab from the widget
         self.tab_widget.removeTab(index)
+        logger.info(f"Tab for {host} closed successfully")
+
+    def closeEvent(self, event):
+        """Handle application shutdown with proper cleanup"""
+        logger.info("Application shutting down, cleaning up connections...")
+
+        # Set shutdown flag
+        self.shutdown_flag.set()
+
+        # Close all connections
+        hosts_to_close = list(self.ssh_clients.keys())
+        for host in hosts_to_close:
+            try:
+                # Close channel
+                if host in self.channels:
+                    channel = self.channels[host]
+                    if channel.active:
+                        channel.close()
+
+                # Close SSH client
+                if host in self.ssh_clients:
+                    ssh_client = self.ssh_clients[host]
+                    ssh_client.close()
+
+            except Exception as e:
+                logger.error(f"Error closing connection to {host} during shutdown: {str(e)}")
+
+        # Wait for all output threads to finish
+        for host, thread in self.output_threads.items():
+            if thread.is_alive():
+                thread.join(timeout=1.0)
+
+        logger.info("Application shutdown complete")
+        event.accept()
 
 
     # File Upload Functionality
@@ -381,26 +644,74 @@ class SSHClientApp(QWidget):
         connection = self.connections[selected_item]
         host = connection["host"]
 
+        # Verify SSH connection exists
+        if host not in self.ssh_clients:
+            QMessageBox.warning(self, "Connection Error", "No active SSH connection for this host.")
+            return
+
         # Open a file dialog to select files to upload
         local_file, _ = QFileDialog.getOpenFileName(self, "Select File to Upload", "", "All Files (*)")
-        if local_file:
-            # Ask the user for the destination directory on the remote server
-            remote_directory, ok = QInputDialog.getText(self, "Remote Directory", "Enter the destination directory on the remote server:")
-            if ok:
-                try:
-                    # Establish an SFTP connection
-                    sftp_client = self.ssh_clients[host].open_sftp()
+        if not local_file or not os.path.exists(local_file):
+            return
 
-                    # Get the remote file path
-                    remote_file = os.path.join(remote_directory, os.path.basename(local_file))
+        # Validate file size (limit to 1GB)
+        try:
+            file_size = os.path.getsize(local_file)
+            if file_size > 1024 * 1024 * 1024:  # 1GB limit
+                QMessageBox.warning(self, "File Too Large", "File size exceeds 1GB limit.")
+                return
+        except OSError as e:
+            QMessageBox.critical(self, "File Error", f"Cannot access file: {str(e)}")
+            return
 
-                    # Upload the file
-                    sftp_client.put(local_file, remote_file)
+        # Ask the user for the destination directory on the remote server
+        remote_directory, ok = QInputDialog.getText(self, "Remote Directory", "Enter the destination directory on the remote server:")
+        if not ok or not remote_directory:
+            return
+
+        try:
+            # Establish an SFTP connection
+            sftp_client = self.ssh_clients[host].open_sftp()
+
+            # Validate remote directory
+            try:
+                sftp_client.stat(remote_directory)
+            except FileNotFoundError:
+                QMessageBox.critical(self, "Directory Error", f"Remote directory does not exist: {remote_directory}")
+                sftp_client.close()
+                return
+
+            # Get the remote file path
+            remote_file = os.path.join(remote_directory, os.path.basename(local_file))
+
+            # Check if remote file already exists
+            try:
+                sftp_client.stat(remote_file)
+                reply = QMessageBox.question(
+                    self, "File Exists",
+                    f"Remote file {os.path.basename(local_file)} already exists. Overwrite?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                if reply != QMessageBox.Yes:
                     sftp_client.close()
+                    return
+            except FileNotFoundError:
+                pass  # File doesn't exist, safe to upload
 
-                    QMessageBox.information(self, "Upload Successful", f"File {os.path.basename(local_file)} uploaded to {remote_directory}.")
-                except Exception as e:
-                    QMessageBox.critical(self, "Upload Error", f"Failed to upload file: {str(e)}")
+            # Upload the file
+            logger.info(f"Uploading {local_file} to {host}:{remote_file}")
+            sftp_client.put(local_file, remote_file)
+            sftp_client.close()
+
+            logger.info(f"Successfully uploaded {local_file} to {host}:{remote_directory}")
+            QMessageBox.information(self, "Upload Successful", f"File {os.path.basename(local_file)} uploaded to {remote_directory}.")
+
+        except paramiko.SFTPError as e:
+            logger.error(f"SFTP error during upload: {str(e)}")
+            QMessageBox.critical(self, "SFTP Error", f"SFTP operation failed: {str(e)}")
+        except Exception as e:
+            logger.error(f"Upload error for {local_file}: {str(e)}")
+            QMessageBox.critical(self, "Upload Error", f"Failed to upload file: {str(e)}")
 
     # File Download Functionality
     def download_file(self):
@@ -412,26 +723,69 @@ class SSHClientApp(QWidget):
         connection = self.connections[selected_item]
         host = connection["host"]
 
+        # Verify SSH connection exists
+        if host not in self.ssh_clients:
+            QMessageBox.warning(self, "Connection Error", "No active SSH connection for this host.")
+            return
+
         # Ask the user for the remote file path
         remote_file, ok = QInputDialog.getText(self, "Remote File", "Enter the path of the file to download from the remote server:")
-        if ok:
-            # Open a file dialog to select a download location
-            local_directory = QFileDialog.getExistingDirectory(self, "Select Download Directory")
-            if local_directory:
-                try:
-                    # Establish an SFTP connection
-                    sftp_client = self.ssh_clients[host].open_sftp()
+        if not ok or not remote_file:
+            return
 
-                    # Get the local file path
-                    local_file = os.path.join(local_directory, os.path.basename(remote_file))
+        # Open a file dialog to select a download location
+        local_directory = QFileDialog.getExistingDirectory(self, "Select Download Directory")
+        if not local_directory:
+            return
 
-                    # Download the file
-                    sftp_client.get(remote_file, local_file)
+        try:
+            # Establish an SFTP connection
+            sftp_client = self.ssh_clients[host].open_sftp()
+
+            # Validate remote file exists and get its info
+            try:
+                file_stat = sftp_client.stat(remote_file)
+                file_size = file_stat.st_size
+
+                # Check file size (limit to 1GB)
+                if file_size > 1024 * 1024 * 1024:  # 1GB limit
+                    QMessageBox.warning(self, "File Too Large", "Remote file size exceeds 1GB limit.")
                     sftp_client.close()
+                    return
 
-                    QMessageBox.information(self, "Download Successful", f"File {os.path.basename(remote_file)} downloaded to {local_directory}.")
-                except Exception as e:
-                    QMessageBox.critical(self, "Download Error", f"Failed to download file: {str(e)}")
+            except FileNotFoundError:
+                QMessageBox.critical(self, "File Error", f"Remote file does not exist: {remote_file}")
+                sftp_client.close()
+                return
+
+            # Get the local file path
+            local_file = os.path.join(local_directory, os.path.basename(remote_file))
+
+            # Check if local file already exists
+            if os.path.exists(local_file):
+                reply = QMessageBox.question(
+                    self, "File Exists",
+                    f"Local file {os.path.basename(remote_file)} already exists. Overwrite?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                if reply != QMessageBox.Yes:
+                    sftp_client.close()
+                    return
+
+            # Download the file
+            logger.info(f"Downloading {host}:{remote_file} to {local_file}")
+            sftp_client.get(remote_file, local_file)
+            sftp_client.close()
+
+            logger.info(f"Successfully downloaded {remote_file} from {host}")
+            QMessageBox.information(self, "Download Successful", f"File {os.path.basename(remote_file)} downloaded to {local_directory}.")
+
+        except paramiko.SFTPError as e:
+            logger.error(f"SFTP error during download: {str(e)}")
+            QMessageBox.critical(self, "SFTP Error", f"SFTP operation failed: {str(e)}")
+        except Exception as e:
+            logger.error(f"Download error for {remote_file}: {str(e)}")
+            QMessageBox.critical(self, "Download Error", f"Failed to download file: {str(e)}")
 
 
 # Custom QLineEdit to handle command history navigation and terminal features
@@ -443,16 +797,20 @@ class CommandLineEdit(QLineEdit):
     def keyPressEvent(self, event):
         # Handle Ctrl+C to send interrupt signal (like in a real terminal)
         if event.key() == Qt.Key_C and event.modifiers() == Qt.ControlModifier:
-            if self.parent.channels:
+            current_host = self.get_current_host()
+            if current_host and current_host in self.parent.channels:
                 # Send interrupt signal (Ctrl+C equivalent)
-                self.parent.channels[list(self.parent.channels.keys())[0]].send("\x03")
+                self.parent.channels[current_host].send("\x03")
+                logger.info(f"Sent Ctrl+C to {current_host}")
             return
 
         # Handle Ctrl+D to close the session
         if event.key() == Qt.Key_D and event.modifiers() == Qt.ControlModifier:
-            if self.parent.channels:
+            current_host = self.get_current_host()
+            if current_host and current_host in self.parent.channels:
                 # Send exit command (Ctrl+D equivalent)
-                self.parent.channels[list(self.parent.channels.keys())[0]].send("\x04")
+                self.parent.channels[current_host].send("\x04")
+                logger.info(f"Sent Ctrl+D to {current_host}")
             return
 
         # Check for Up/Down arrow keys for history navigation
@@ -475,6 +833,25 @@ class CommandLineEdit(QLineEdit):
             return
 
         super().keyPressEvent(event)  # Call the default event handler
+
+    def get_current_host(self):
+        """Get the host for the currently active tab"""
+        if not self.parent.tab_widget:
+            return None
+
+        current_index = self.parent.tab_widget.currentIndex()
+        if current_index < 0:
+            return None
+
+        tab_text = self.parent.tab_widget.tabText(current_index)
+        if not tab_text or '(' not in tab_text:
+            return None
+
+        # Extract host from tab text "host (username)"
+        try:
+            return tab_text.split()[0]
+        except (IndexError, AttributeError):
+            return None
 
 
 # Main entry point of the application

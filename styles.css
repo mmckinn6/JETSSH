@@ -1,0 +1,120 @@
+/* JETSSH Application Styles */
+
+QWidget {
+    background-color: #1e1e1e;
+    color: #dcdcdc;
+    font-family: Consolas, Monaco, monospace;
+}
+
+QTextEdit {
+    background-color: #1e1e1e;
+    color: #dcdcdc;
+    border: 1px solid #3a3a3a;
+}
+
+QLineEdit {
+    background-color: #1e1e1e;
+    color: #00ffff;
+    border: 1px solid #3a3a3a;
+    padding: 4px;
+}
+
+QPushButton {
+    background-color: #2e2e2e;
+    color: #dcdcdc;
+    border: 1px solid #3a3a3a;
+    padding: 5px;
+    font-size: 14px;
+    border-radius: 5px;
+    box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+QPushButton:hover {
+    background-color: #3a3a3a;
+    box-shadow: 4px 4px 8px rgba(0, 0, 0, 0.6);
+}
+
+QPushButton:pressed {
+    background-color: #4e4e4e;
+    box-shadow: none;
+}
+
+QPushButton#launchButton {
+    background-color: #ff8c00; /* Orange color */
+    color: #ffffff;
+    border-radius: 8px;
+    border: 2px solid #4e4e4e;
+    padding: 10px;
+    font-size: 16px;
+    font-weight: bold;
+    box-shadow: 3px 3px 6px rgba(0, 0, 0, 0.6);
+}
+
+QPushButton#launchButton:hover {
+    background-color: #ffa500;
+    border: 2px solid #4e4e4e;
+    box-shadow: 5px 5px 10px rgba(0, 0, 0, 0.8);
+}
+
+QPushButton#launchButton:pressed {
+    background-color: #ff7f00;
+    border: 2px solid #4e4e4e;
+    box-shadow: none;
+}
+
+QListWidget {
+    background-color: #2e2e2e;
+    color: #dcdcdc;
+    border: 1px solid #3a3a3a;
+}
+
+QLabel {
+    color: #dcdcdc;
+    font-size: 14px;
+}
+
+QTabWidget::pane {
+    border: 1px solid #3a3a3a;
+}
+
+QTabBar::tab {
+    background-color: #2e2e2e;
+    padding: 10px;
+    color: #dcdcdc;
+}
+
+QTabBar::tab:selected {
+    background-color: #3a3a3a;
+    color: #ffffff;
+}
+
+QScrollBar:vertical {
+    border: 1px solid #3a3a3a;
+    background-color: #1e1e1e;
+    width: 12px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #3a3a3a;
+    border-radius: 5px;
+    min-height: 20px;
+}
+
+QComboBox {
+    background-color: #2e2e2e;
+    color: #dcdcdc;
+    border: 1px solid #3a3a3a;
+    padding: 4px;
+}
+
+QComboBox::drop-down {
+    border: none;
+}
+
+QComboBox::down-arrow {
+    border: none;
+}
+
+QFormLayout QLabel {
+    font-weight: bold;
+}

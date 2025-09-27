@@ -83,7 +83,17 @@ class SSHKeyGeneratorTab(QWidget):
 
     def generate_ssh_key(self):
         key_type = self.key_type.currentText()
-        key_length = int(self.key_length_input.currentText()) if self.key_type.currentText() != "Ed25519" else None
+
+        # Safely handle key length conversion
+        if self.key_type.currentText() != "Ed25519":
+            try:
+                key_length = int(self.key_length_input.currentText())
+            except (ValueError, TypeError):
+                QMessageBox.critical(self, "Error", "Invalid key length specified.")
+                return
+        else:
+            key_length = None
+
         passphrase = self.passphrase_input.text().encode() if self.passphrase_input.text() else None
 
         try:
@@ -111,24 +121,49 @@ class SSHKeyGeneratorTab(QWidget):
             self.save_private_button.setEnabled(True)
             self.save_public_button.setEnabled(True)
 
+        except paramiko.SSHException as e:
+            QMessageBox.critical(self, "SSH Error", f"Failed to generate SSH key: {str(e)}")
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to generate SSH key: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Unexpected error generating SSH key: {str(e)}")
+
+        # Clear sensitive data from memory
+        if passphrase:
+            passphrase = None
 
 
     def save_private_key(self):
-        """ Save the private key to a file """
+        """Save the private key to a file with proper security"""
+        if not hasattr(self, 'private_key') or not self.private_key:
+            QMessageBox.warning(self, "Error", "No private key to save. Please generate a key first.")
+            return
+
         try:
             options = QFileDialog.Options()
             file_name, _ = QFileDialog.getSaveFileName(self, "Save Private Key", "", "Key Files (*.pem);;All Files (*)", options=options)
             if file_name:
+                # Write with restrictive permissions
                 with open(file_name, 'w') as key_file:
                     key_file.write(self.private_key_text.toPlainText())
+
+                # Set restrictive permissions (owner read/write only)
+                try:
+                    import os
+                    os.chmod(file_name, 0o600)
+                except OSError:
+                    QMessageBox.warning(self, "Warning", "Could not set restrictive permissions on private key file.")
+
                 QMessageBox.information(self, "Success", "Private key saved successfully.")
-        except Exception as e:
+        except (IOError, OSError) as e:
             QMessageBox.critical(self, "Error", f"Failed to save private key: {str(e)}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Unexpected error saving private key: {str(e)}")
 
     def save_public_key(self):
-        """ Save the public key to a file """
+        """Save the public key to a file"""
+        if not hasattr(self, 'private_key') or not self.private_key:
+            QMessageBox.warning(self, "Error", "No public key to save. Please generate a key first.")
+            return
+
         try:
             options = QFileDialog.Options()
             file_name, _ = QFileDialog.getSaveFileName(self, "Save Public Key", "", "Key Files (*.pub);;All Files (*)", options=options)
@@ -136,5 +171,7 @@ class SSHKeyGeneratorTab(QWidget):
                 with open(file_name, 'w') as key_file:
                     key_file.write(self.public_key_text.toPlainText())
                 QMessageBox.information(self, "Success", "Public key saved successfully.")
-        except Exception as e:
+        except (IOError, OSError) as e:
             QMessageBox.critical(self, "Error", f"Failed to save public key: {str(e)}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Unexpected error saving public key: {str(e)}")
