@@ -1,103 +1,222 @@
 # JETSSH
 
-JETSSH is a user-friendly SSH client built with PyQt and Paramiko, designed for Linux and macOS environments. It offers real-time terminal-like interaction, SCP/SFTP file transfer, and an intuitive GUI. Whether you need to manage servers or transfer files securely, JETSSH provides a seamless experience.
+JETSSH is a production-ready SSH client built with PyQt and Paramiko, designed for cross-platform use on Windows, Linux, and macOS. It offers real-time terminal-like interaction, secure file transfer (SCP/SFTP), SSH key generation, and an intuitive dark-themed GUI with enterprise-grade security features.
 
-## Features
+## ✨ Features
 
-- **SSH Client with Real-Time Terminal**: Execute Linux commands and use utilities in real-time, with terminal-like output.
-- **Current Working Directory**: Easily track and display the current working directory while connected via SSH.
-- **File Transfer (SCP/SFTP)**: Securely upload or download files using a graphical file browser, integrated into the SSH client.
-- **Cross-Platform**: Supports both macOS and Linux.
-- **RPM Packaging**: Ready to be packaged as an installable RPM program.
+### 🖥️ **Core SSH Functionality**
+- **Real-Time Terminal Interface**: Execute commands with live output and terminal-like interaction
+- **Multi-Key Authentication**: Support for RSA, DSA, ECDSA, and Ed25519 key types
+- **Secure Host Key Validation**: Enhanced security with proper host key verification
+- **Command History**: Navigate through command history with up/down arrows
+- **Multiple Sessions**: Manage multiple SSH connections simultaneously with tabbed interface
 
-## Installation
+### 🔐 **SSH Key Management**
+- **Built-in Key Generator**: Generate SSH keys directly within the application
+- **Multiple Key Types**: Support for RSA (1024-4096 bits), DSA, ECDSA (256/384/521 bits), and Ed25519
+- **Encrypted Keys**: Support for passphrase-protected private keys
+- **Secure Storage**: Automatic file permission setting (0o600) for private keys
 
-To install JETSSH, follow these steps:
+### 📁 **File Transfer (SFTP)**
+- **Drag-and-Drop Interface**: Easy file upload and download
+- **File Size Validation**: 1GB file size limits with progress feedback
+- **Overwrite Protection**: Confirmation prompts for existing files
+- **Directory Validation**: Automatic remote directory verification
+
+### ⚙️ **Predefined Commands**
+- **Custom Command Library**: Save frequently used commands
+- **One-Click Execution**: Execute saved commands on active SSH sessions
+- **Command Validation**: Safety checks for potentially dangerous commands
+- **Import/Export**: JSON-based command storage and backup
+
+### 🛡️ **Security & Reliability**
+- **Enterprise-Grade Security**: Secure memory handling and credential management
+- **Comprehensive Logging**: Structured logging to file and console
+- **Error Recovery**: Robust error handling with detailed user feedback
+- **Resource Management**: Automatic cleanup and graceful shutdown
+
+### 🎨 **User Interface**
+- **Modern Dark Theme**: Professional dark UI with external CSS styling
+- **Responsive Design**: Adaptive layout for different screen sizes
+- **Intuitive Navigation**: Clean, organized interface with logical grouping
+- **Real-time Feedback**: Status indicators and progress notifications
+
+## 🔧 Installation
 
 ### Prerequisites
-- Python 3.7+
+- Python 3.7 or higher
 - PyQt5
 - Paramiko
-- SCP
-- SFTP
 
-### Steps
+### Quick Start
 
-1. Clone this repository:
-    ```bash
-    git clone https://github.com/mmckinn6/JETSSH.git
-    ```
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/mmckinn6/JETSSH.git
+   cd JETSSH
+   ```
 
-2. Navigate into the project directory:
-    ```bash
-    cd JETSSH
-    ```
+2. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-3. Install dependencies:
-    ```bash
-    pip install -r requirements.txt
-    ```
+3. **Launch the application:**
+   ```bash
+   python JETSSH.py
+   ```
 
-4. Run the application:
-    ```bash
-    python main.py
-    ```
+### Platform-Specific Notes
 
-### Optional: Packaging into an RPM
+**Windows:**
+- Tested on Windows 10/11 with Python 3.7+
+- No additional configuration required
 
-To package the application into an RPM for installation on Linux systems, follow these steps:
+**Linux:**
+- Ensure Qt5 development libraries are installed
+- May require: `sudo apt-get install python3-pyqt5` (Ubuntu/Debian)
 
-1. Ensure that `rpm-build` is installed on your system.
-2. Build the RPM package using the following command:
-    ```bash
-    python setup.py bdist_rpm
-    ```
-    
-## Usage
+**macOS:**
+- Install via Homebrew: `brew install pyqt5`
+- May need to set `QT_QPA_PLATFORM=cocoa` for some systems
 
-### SSH Client
-- Launch the application and click on the "Launch Session" button to connect to an SSH server.
-- Execute commands directly in the terminal window. The current working directory will be displayed and updated dynamically.
+## 🚀 Usage
 
-### File Transfer (SCP/SFTP)
-- Use the file browser to select files for transfer. You can upload or download files to and from the remote server.
+### SSH Connections
 
-## Roadmap
+1. **Add a Connection:**
+   - Click "Add Connection"
+   - Enter hostname/IP and username
+   - Optionally select a private key file
+   - Connection validates hostname format automatically
 
-- [ ] Add predefined commands feature.
-- [ ] Support for Windows.
-- [ ] Improve UI/UX for a more intuitive experience.
-- [ ] Extend file transfer functionality
-- [ ] Add more customizable themes
-- [ ] Add SSH Key Generation features
-- [ ] Improve compatibility with text editor utilities such as vim
+2. **Launch Session:**
+   - Select a connection from the list
+   - Click "Launch Session"
+   - Enter password or key passphrase when prompted
 
+3. **Execute Commands:**
+   - Type commands in the input field
+   - Use Up/Down arrows for command history
+   - Ctrl+C and Ctrl+D work as expected
 
+### SSH Key Generation
 
+1. Navigate to the "SSH Key Generator" tab
+2. Select key type (RSA, DSA, ECDSA, Ed25519)
+3. Choose key length (where applicable)
+4. Optionally set a passphrase
+5. Click "Generate SSH Key"
+6. Save both private and public keys
 
-## Contributing
+### File Transfer
 
-Contributions are welcome! If you'd like to contribute to JETSSH, feel free to open an issue or submit a pull request.
+1. **Upload Files:**
+   - Select active connection
+   - Click "Upload File"
+   - Choose local file and remote destination
+   - Confirm overwrite if file exists
 
-1. Fork the repository.
-2. Create your feature branch: 
-    ```bash
-    git checkout -b feature-branch
-    ```
-3. Commit your changes: 
-    ```bash
-    git commit -m 'Add some feature'
-    ```
-4. Push to the branch: 
-    ```bash
-    git push origin feature-branch
-    ```
-5. Submit a pull request.
+2. **Download Files:**
+   - Select active connection
+   - Click "Download File"
+   - Enter remote file path
+   - Choose local destination
 
-## License
+### Predefined Commands
+
+1. **Add Commands:**
+   - Use the predefined commands panel in any SSH session
+   - Click "Add Command" to create new entries
+   - Commands are validated for safety
+
+2. **Execute Commands:**
+   - Select a command from the list
+   - Click "Execute Command"
+   - Dangerous commands require confirmation
+
+## 📁 Project Structure
+
+```
+JETSSH/
+├── JETSSH.py              # Main application entry point
+├── JETSSHKEYGEN.py        # SSH key generation module
+├── PredefinedCommands.py  # Command management module
+├── styles.css             # External stylesheet
+├── requirements.txt       # Python dependencies
+├── README.md             # This file
+└── LICENSE               # MIT License
+```
+
+## 🔒 Security Features
+
+- **Host Key Verification**: Uses `WarningPolicy()` instead of insecure `AutoAddPolicy()`
+- **Multi-Key Support**: Automatic detection and loading of different key types
+- **Secure File Permissions**: Automatic setting of restrictive permissions (0o600)
+- **Memory Security**: Secure clearing of passwords and passphrases
+- **Input Validation**: Comprehensive validation of user inputs and file operations
+- **Error Boundaries**: Isolated error handling prevents cascading failures
+
+## 📝 Logging
+
+JETSSH creates detailed logs in `jetssh.log` including:
+- Connection attempts and results
+- File transfer operations
+- Error conditions and recovery
+- Security events and warnings
+
+## 🤝 Contributing
+
+Contributions are welcome! Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature-name`
+3. Make your changes with appropriate tests
+4. Commit with descriptive messages: `git commit -m 'Add feature description'`
+5. Push to your branch: `git push origin feature-name`
+6. Submit a pull request
+
+### Development Guidelines
+
+- Follow PEP 8 style guidelines
+- Add comprehensive error handling
+- Include logging for significant operations
+- Test on multiple platforms when possible
+- Update documentation for new features
+
+## 🐛 Known Issues & Limitations
+
+- Large file transfers (>1GB) are blocked for performance reasons
+- Some terminal applications (like `top`) may not display correctly
+- Windows may require running as administrator for certain SSH operations
+
+## 📋 Changelog
+
+### Version 2.0 (Latest)
+- ✅ **Security Overhaul**: Enhanced host key validation and multi-key support
+- ✅ **Bug Fixes**: Fixed infinite loops, channel targeting, and thread safety
+- ✅ **UI Improvements**: External CSS, better validation, enhanced UX
+- ✅ **Robustness**: Comprehensive error handling and logging system
+- ✅ **Features**: SSH key generation, predefined commands, file validation
+
+### Version 1.0
+- Basic SSH client functionality
+- File transfer capabilities
+- Tabbed interface
+- Basic connection management
+
+## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Contact
+## 📞 Contact & Support
 
-For any questions, suggestions, or issues, please reach out at: [mmckinn6](https://github.com/mmckinn6) or (nwylds)(https://github.com/nwylds) 
+- **Author**: [mmckinn6](https://github.com/mmckinn6)
+- **Contributor**: [nwylds](https://github.com/nwylds)
+- **Issues**: [GitHub Issues](https://github.com/mmckinn6/JETSSH/issues)
+
+For questions, bug reports, or feature requests, please open an issue on GitHub.
+
+---
+
+**JETSSH** - *Secure, Reliable, Cross-Platform SSH Client*
