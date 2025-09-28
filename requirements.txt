@@ -1,0 +1,35 @@
+# JETSSH Enhanced - Requirements
+# Core SSH and GUI dependencies
+PyQt5>=5.15.0
+paramiko>=2.7.0
+
+# Enhanced terminal emulation and text processing
+pexpect>=4.8.0; sys_platform != "win32"
+win32api>=0.0.0; sys_platform == "win32"
+win32gui>=0.0.0; sys_platform == "win32"
+
+# File management and compression
+pathlib2>=2.3.5
+zipfile36>=0.1.3
+
+# JSON and configuration handling
+jsonschema>=3.2.0
+
+# Cryptography for enhanced SSH key support
+cryptography>=3.4.0
+
+# Optional: For advanced terminal features
+colorama>=0.4.4
+rich>=10.0.0
+
+# Optional: For enhanced file operations
+send2trash>=1.5.0
+
+# Optional: For plugin development
+importlib-metadata>=4.0.0
+
+# Optional: For monitoring and performance
+psutil>=5.8.0
+
+# Optional: For advanced logging
+structlog>=21.0.0

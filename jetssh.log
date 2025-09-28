@@ -1,0 +1,8 @@
+2025-09-27 14:09:38,551 - __main__ - INFO - Loaded external stylesheet
+2025-09-27 14:09:38,551 - __main__ - INFO - No connections file found, starting with empty list
+2025-09-27 14:39:26,044 - __main__ - INFO - Saved 1 connections
+2025-09-27 14:39:26,044 - __main__ - INFO - Added connection: mtmck@127.1.11.1
+2025-09-27 14:39:45,333 - __main__ - ERROR - Unexpected error connecting to 127.1.11.1: [Errno None] Unable to connect to port 22 on 127.1.11.1
+2025-09-27 14:40:05,905 - __main__ - INFO - Saved 0 connections
+2025-09-27 14:40:25,884 - __main__ - INFO - Application shutting down, cleaning up connections...
+2025-09-27 14:40:25,884 - __main__ - INFO - Application shutdown complete
