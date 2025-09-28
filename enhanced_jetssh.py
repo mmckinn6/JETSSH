@@ -44,7 +44,8 @@ except ImportError as e:
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QLineEdit, QPushButton, QListWidget, QTabWidget, QTextEdit,
                              QFileDialog, QInputDialog, QMessageBox, QSplitter, QMenuBar,
-                             QMenu, QAction, QStatusBar, QToolBar, QMainWindow)
+                             QMenu, QAction, QStatusBar, QToolBar, QMainWindow, QDialog,
+                             QDialogButtonBox, QFormLayout, QComboBox)
 from PyQt5.QtCore import Qt, pyqtSignal, QMutex, QTimer
 from PyQt5.QtGui import QTextCursor, QKeySequence, QIcon, QFont
 
