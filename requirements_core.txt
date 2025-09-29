@@ -1,0 +1,9 @@
+# JETSSH Enhanced - Core Requirements (Windows Compatible)
+PyQt5>=5.15.0
+paramiko>=2.7.0
+pathlib2>=2.3.5
+cryptography>=3.4.0
+
+# Optional enhanced features
+colorama>=0.4.4
+psutil>=5.8.0
